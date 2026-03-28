@@ -1,5 +1,5 @@
 ---
-
+export const prerender = false;
 ---
 
 <html lang="en">
@@ -8,10 +8,256 @@
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Mona Mayhem</title>
+		<title>Mona Mayhem – GitHub Contribution Battle Arena</title>
+		<style>
+			*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+			body {
+				font-family: system-ui, sans-serif;
+				background: #0d1117;
+				color: #c9d1d9;
+				min-height: 100vh;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				padding: 2rem 1rem;
+			}
+
+			header {
+				text-align: center;
+				margin-bottom: 2rem;
+			}
+
+			header h1 {
+				font-size: 2rem;
+				color: #f0f6fc;
+			}
+
+			header p {
+				color: #8b949e;
+				margin-top: 0.4rem;
+			}
+
+			.battle-form {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 1rem;
+				justify-content: center;
+				align-items: flex-end;
+				width: 100%;
+				max-width: 640px;
+			}
+
+			.player {
+				display: flex;
+				flex-direction: column;
+				gap: 0.4rem;
+				flex: 1 1 180px;
+			}
+
+			.player label {
+				font-size: 0.85rem;
+				color: #8b949e;
+				text-transform: uppercase;
+				letter-spacing: 0.05em;
+			}
+
+			.player input {
+				padding: 0.6rem 0.8rem;
+				border: 1px solid #30363d;
+				border-radius: 6px;
+				background: #161b22;
+				color: #c9d1d9;
+				font-size: 1rem;
+				width: 100%;
+			}
+
+			.player input:focus {
+				outline: none;
+				border-color: #58a6ff;
+			}
+
+			.vs {
+				font-size: 1.2rem;
+				font-weight: bold;
+				color: #f85149;
+				padding-bottom: 0.4rem;
+			}
+
+			#battle-btn {
+				padding: 0.65rem 1.6rem;
+				background: #238636;
+				color: #fff;
+				border: none;
+				border-radius: 6px;
+				font-size: 1rem;
+				cursor: pointer;
+				white-space: nowrap;
+			}
+
+			#battle-btn:hover { background: #2ea043; }
+			#battle-btn:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+
+			#results {
+				margin-top: 2rem;
+				width: 100%;
+				max-width: 640px;
+			}
+
+			.result-cards {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 1rem;
+				justify-content: center;
+			}
+
+			.card {
+				flex: 1 1 220px;
+				background: #161b22;
+				border: 1px solid #30363d;
+				border-radius: 8px;
+				padding: 1.2rem;
+				text-align: center;
+			}
+
+			.card .username {
+				font-size: 1.1rem;
+				font-weight: bold;
+				color: #58a6ff;
+				word-break: break-all;
+			}
+
+			.card .contributions {
+				font-size: 2rem;
+				font-weight: bold;
+				margin: 0.5rem 0;
+				color: #f0f6fc;
+			}
+
+			.card .label {
+				font-size: 0.8rem;
+				color: #8b949e;
+			}
+
+			.card.winner {
+				border-color: #3fb950;
+			}
+
+			.card .winner-badge {
+				display: inline-block;
+				background: #3fb950;
+				color: #0d1117;
+				font-size: 0.75rem;
+				font-weight: bold;
+				padding: 0.15rem 0.5rem;
+				border-radius: 20px;
+				margin-top: 0.4rem;
+			}
+
+			.card .tie-badge {
+				display: inline-block;
+				background: #f0a500;
+				color: #0d1117;
+				font-size: 0.75rem;
+				font-weight: bold;
+				padding: 0.15rem 0.5rem;
+				border-radius: 20px;
+				margin-top: 0.4rem;
+			}
+
+			.error-msg {
+				color: #f85149;
+				text-align: center;
+				padding: 0.6rem;
+			}
+
+			.loading-msg {
+				text-align: center;
+				color: #8b949e;
+			}
+		</style>
 	</head>
 	<body>
-		<h1>Mona Mayhem</h1>
-		<p>Welcome to Mona Mayhem! Time to build a GitHub Contribution Battle Arena.</p>
+		<header>
+			<h1>⚔️ Mona Mayhem</h1>
+			<p>GitHub Contribution Battle Arena</p>
+		</header>
+
+		<form class="battle-form" id="battle-form">
+			<div class="player">
+				<label for="player1">Player 1</label>
+				<input id="player1" type="text" placeholder="GitHub username" autocomplete="off" required />
+			</div>
+
+			<span class="vs">VS</span>
+
+			<div class="player">
+				<label for="player2">Player 2</label>
+				<input id="player2" type="text" placeholder="GitHub username" autocomplete="off" required />
+			</div>
+
+			<button type="submit" id="battle-btn">⚔️ Battle!</button>
+		</form>
+
+		<section id="results" aria-live="polite"></section>
+
+		<script>
+			const form = document.getElementById('battle-form') as HTMLFormElement;
+			const btn = document.getElementById('battle-btn') as HTMLButtonElement;
+			const results = document.getElementById('results') as HTMLElement;
+
+			async function fetchContributions(username: string): Promise<number> {
+				const res = await fetch(`/api/contributions/${encodeURIComponent(username)}`);
+				if (!res.ok) {
+					const data = await res.json().catch(() => ({}));
+					throw new Error((data as { error?: string }).error ?? `Failed to fetch data for ${username}`);
+				}
+				const data = await res.json() as { contributions?: number };
+				return data.contributions ?? 0;
+			}
+
+			form.addEventListener('submit', async (e) => {
+				e.preventDefault();
+
+				const p1 = (document.getElementById('player1') as HTMLInputElement).value.trim();
+				const p2 = (document.getElementById('player2') as HTMLInputElement).value.trim();
+
+				if (!p1 || !p2) return;
+
+				btn.disabled = true;
+				results.innerHTML = '<p class="loading-msg">Fetching battle data…</p>';
+
+				try {
+					const [c1, c2] = await Promise.all([fetchContributions(p1), fetchContributions(p2)]);
+
+					const p1Wins = c1 > c2;
+					const p2Wins = c2 > c1;
+					const tie = c1 === c2;
+
+					results.innerHTML = `
+						<div class="result-cards">
+							<div class="card ${p1Wins ? 'winner' : ''}">
+								<div class="username">@${p1}</div>
+								<div class="contributions">${c1.toLocaleString()}</div>
+								<div class="label">contributions</div>
+								${p1Wins ? '<span class="winner-badge">🏆 Winner</span>' : ''}
+								${tie ? '<span class="tie-badge">🤝 Tie</span>' : ''}
+							</div>
+							<div class="card ${p2Wins ? 'winner' : ''}">
+								<div class="username">@${p2}</div>
+								<div class="contributions">${c2.toLocaleString()}</div>
+								<div class="label">contributions</div>
+								${p2Wins ? '<span class="winner-badge">🏆 Winner</span>' : ''}
+								${tie ? '<span class="tie-badge">🤝 Tie</span>' : ''}
+							</div>
+						</div>
+					`;
+				} catch (err) {
+					results.innerHTML = `<p class="error-msg">⚠️ ${(err as Error).message}</p>`;
+				} finally {
+					btn.disabled = false;
+				}
+			});
+		</script>
 	</body>
 </html>
